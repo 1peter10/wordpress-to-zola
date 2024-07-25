@@ -55,6 +55,15 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+
+/// Normalize content before converting it to markdown to not loose line breaks
+
+fn normalize_line_breaks(content: &str) -> String {
+    let content_without_windows_breaks = content.replace("\r", "\n");
+    let normalized_content = content_without_windows_breaks.replace("\n", "<br>");
+    normalized_content
+}
+
 /// Read xml from `input_file` and create `zola` content directory in
 /// `output_dir`.
 fn convert(input_file: PathBuf, output_dir: PathBuf) -> Result<()> {
@@ -103,7 +112,9 @@ fn convert(input_file: PathBuf, output_dir: PathBuf) -> Result<()> {
                 let date = DateTime::parse_from_rfc2822(&item.pub_date)
                     .expect("cannot parse pubDate");
 
-                let markdown = parse_html(item.content());
+                let raw_content = item.content();
+                let normalized_content = normalize_line_breaks(raw_content);  
+                let markdown = parse_html(&normalized_content); 
                 debug!("{}", markdown);
 
                 create_page(&path, &item.title, date, &markdown, &categories, &tags)?;
@@ -190,9 +201,10 @@ fn create_section(section: &Path) -> Result<()> {
 /// Create post file
 fn create_page(path: &Path, title: &str, date: DateTime<FixedOffset>, markdown: &str, categories: &[String], tags: &[String]) -> Result<()> {
     let mut file = File::create(path)?;
+    let escaped_title = title.replace("\"", "\\\"");
     // write front-matter
     writeln!(file, "+++")?;
-    writeln!(file, "title = \"{}\"", title)?;
+    writeln!(file, "title = \"{}\"", escaped_title)?;
     writeln!(file, "date = {}", date.to_rfc3339())?;
     writeln!(file, "[taxonomies]")?;
     writeln!(file, "categories = [{}]", categories.iter().map(|c| format!("\"{}\"", c)).collect::<Vec<_>>().join(", "))?;
