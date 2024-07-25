@@ -76,6 +76,17 @@ fn convert(input_file: PathBuf, output_dir: PathBuf) -> Result<()> {
         }
         match item.post_type {
             PostType::Post => {
+                let mut tags = Vec::new();
+                let mut categories = Vec::new();
+
+                for category in &item.categories {
+                    match category.domain.as_str() {
+                        "post_tag" => tags.push(category.nicename.clone()),
+                        "category" => categories.push(category.nicename.clone()),
+                        _ => {}
+                    }
+                }
+
                 let path = output_dir.join(generate_path(&base_url, &item.link));
                 info!("Post [{:?}] {} -> {:?}", item.status, item.title, &path);
 
@@ -95,7 +106,7 @@ fn convert(input_file: PathBuf, output_dir: PathBuf) -> Result<()> {
                 let markdown = parse_html(item.content());
                 debug!("{}", markdown);
 
-                create_page(&path, &item.title, date, &markdown)?;
+                create_page(&path, &item.title, date, &markdown, &categories, &tags)?;
 
             },
             _ => debug!("Ignoring attachment {}", item.title),
@@ -128,6 +139,15 @@ struct Item {
     post_type: PostType,
     encoded: Vec<String>,
     status: Status,
+    #[serde(rename = "category", default)]
+    categories: Vec<Category>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Category {
+    domain: String,
+    #[serde(rename = "nicename")]
+    nicename: String,
 }
 
 impl Item {
@@ -168,12 +188,15 @@ fn create_section(section: &Path) -> Result<()> {
 }
 
 /// Create post file
-fn create_page(path: &Path, title: &str, date: DateTime<FixedOffset>, markdown: &str) -> Result<()> {
+fn create_page(path: &Path, title: &str, date: DateTime<FixedOffset>, markdown: &str, categories: &[String], tags: &[String]) -> Result<()> {
     let mut file = File::create(path)?;
     // write front-matter
     writeln!(file, "+++")?;
     writeln!(file, "title = \"{}\"", title)?;
     writeln!(file, "date = {}", date.to_rfc3339())?;
+    writeln!(file, "[taxonomies]")?;
+    writeln!(file, "categories = [{}]", categories.iter().map(|c| format!("\"{}\"", c)).collect::<Vec<_>>().join(", "))?;
+    writeln!(file, "tags = [{}]", tags.iter().map(|t| format!("\"{}\"", t)).collect::<Vec<_>>().join(", "))?;
     writeln!(file, "+++")?;
     // and content
     writeln!(file, "{}", markdown)?;
